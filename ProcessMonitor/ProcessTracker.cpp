@@ -7,19 +7,21 @@
 //=================================================
 // Populate a vector with all running processes
 //====================================================
-bool ProcessTracker::GetAllRunningProcesses(std::vector<String>& vProcNames, std::vector<DWORD>& vProcIDs)
+int ProcessTracker::GetAllRunningProcesses(std::vector<String>& vProcNames, std::vector<DWORD>& vProcIDs)
 {
 	//clear containers
 	vProcIDs.clear();
 	vProcNames.clear();
 
 	DWORD aProcesses[1024], cbNeeded, cProcesses;
+
+	// Retrieves the process identifier for each process object in system
 	if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))
 		return false;
 	// determine how many processes returned
 	cProcesses = cbNeeded / sizeof(DWORD);
 
-
+	// Iterate through all found processes
 	unsigned int i;
 	for (i = 0; i < cProcesses; ++i)
 	{
@@ -52,10 +54,14 @@ bool ProcessTracker::GetAllRunningProcesses(std::vector<String>& vProcNames, std
 		}
 
 	}
+
+#ifdef _DEBUG
 	for (int i = 0; i < vProcNames.size(); ++i)
 		printf("%s %d\n", vProcNames[i].c_str(), vProcIDs[i]);
+#endif
 
-	return true;
+	// return number of processes found
+	return vProcNames.size();
 
 }
 
@@ -112,8 +118,11 @@ bool ProcessTracker::FindRunningProcesses(const String& procName, std::vector<St
 		}
 
 	}
+
+#ifdef _DEBUG
 	for (int i = 0; i < vProcNames.size(); ++i)
 		printf("%s %d\n", vProcNames[i].c_str(), vProcIDs[i]);
+#endif
 
 	return true;
 }
@@ -136,8 +145,10 @@ bool ProcessTracker::TerminateProcesses(std::vector<DWORD>& vProcIDs)
 
 		GetExitCodeProcess(hProcess, &dwExitCode);
 		TerminateProcess(hProcess, dwExitCode);
-
+		
+#ifdef _DEBUG
 		printf("Process Terminated: %s Exit Code: %d\n", strProcessName.c_str(), dwExitCode);
+#endif
 
 		// Release the handle to the process.
 		CloseHandle(hProcess);
@@ -149,19 +160,28 @@ bool ProcessTracker::TerminateProcesses(std::vector<DWORD>& vProcIDs)
 //================================================================
 // Create process by given path
 //===============================================================
-bool ProcessTracker::StartProcess(const String& procFullPathName)
+bool ProcessTracker::StartProcess(const String& procFullPathName, bool hide)
 {
 	HINSTANCE hInstance;
 
-	hInstance = ShellExecute(NULL, NULL, procFullPathName.c_str(), NULL, NULL, SW_HIDE);
+	if(hide)
+		hInstance = ShellExecute(NULL, NULL, procFullPathName.c_str(), NULL, NULL, SW_HIDE);
+	else
+		hInstance = ShellExecute(NULL, NULL, procFullPathName.c_str(), NULL, NULL, SW_SHOWNORMAL);
+
+
 	if ((int)hInstance < 32)
 	{
+#ifdef _DEBUG
 		printf("Process not started - %s\n", procFullPathName.c_str());
+#endif
 		return false;
 	}
 	else
 	{
+#ifdef _DEBUG
 		printf("Process started - %s\n", procFullPathName.c_str());
+#endif
 		return true;
 	}
 
@@ -170,39 +190,38 @@ bool ProcessTracker::StartProcess(const String& procFullPathName)
 //=====================================================================
 // Checks if the process with given id is running
 //=====================================================================
-bool ProcessTracker::GetProcessesStatus(const String& procKeyword, const std::vector<DWORD>& vProcIDs)
+bool ProcessTracker::IsProcessRunning(const String& procKeyword, const DWORD& procID)
 {
-	bool queryStatus = false;
-	for (unsigned int i = 0; i < vProcIDs.size(); ++i)
+
+	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
+		PROCESS_VM_READ, FALSE, procID);
+
+	if (NULL == hProcess)
 	{
-		HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
-			PROCESS_VM_READ,
-			FALSE, vProcIDs[i]);
-
-		if (NULL == hProcess)
-		{
-			printf("process not found\n");
-
-		}
-		TCHAR szProcessName[MAX_PATH] = TEXT("<unknown>");
-		GetProcessImageFileName(hProcess, szProcessName, _countof(szProcessName));
-		String strProcName(szProcessName);
-
-		DWORD dwExitCode = 0;
-		GetExitCodeProcess(hProcess, &dwExitCode);
-	//	printf("%s - %d\n", strProcName.c_str(), dwExitCode);
-		if(dwExitCode == STILL_ACTIVE && strProcName.find(procKeyword) != std::string::npos)
-			//at least one of the given PIDs is still active
-			queryStatus = true;
+#ifdef _DEBUG
+		printf("process not found\n");
+#endif
+		return false;
 	}
 
-	return queryStatus;
+	TCHAR szProcessName[MAX_PATH] = TEXT("<unknown>");
+	GetProcessImageFileName(hProcess, szProcessName, _countof(szProcessName));
+	String strProcName(szProcessName);
+
+	DWORD dwExitCode = 0;
+	GetExitCodeProcess(hProcess, &dwExitCode);
+	// printf("%s - %d\n", strProcName.c_str(), dwExitCode);
+	if (dwExitCode == STILL_ACTIVE && strProcName.find(procKeyword) != std::string::npos)
+		//the pID is still active
+		return true;
+	else
+		return false;
 }
 
-//=========================================================
-// check for given amount of time to see if process ends
-//=========================================================
-bool ProcessTracker::IsProcessRunning(const DWORD& procID, const DWORD& waitTime)
+//===================================================================
+// check for given amount of time in ms to see if process ends
+//=====================================================================
+bool ProcessTracker::HasProcessEnded(const DWORD& procID, const DWORD& waitTime)
 {
 	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS | PROCESS_QUERY_INFORMATION |
 		PROCESS_VM_READ,
@@ -211,31 +230,81 @@ bool ProcessTracker::IsProcessRunning(const DWORD& procID, const DWORD& waitTime
 	if (NULL == hProcess)
 	{
 		printf("process not found\n");
-		return false;
+		return true;
 	}
 
 	DWORD procStatus = WaitForSingleObject(hProcess, waitTime);
-	printf("%ul\n", procStatus);
+
 	if (procStatus == WAIT_TIMEOUT)
 	{
 		CloseHandle(hProcess);
-		return true;
+		return false;
 	}
 	else if (procStatus == WAIT_OBJECT_0)
 	{
 		CloseHandle(hProcess);
-		return false;
+		return true;
 	}
 	else if(procStatus == WAIT_FAILED)
 	{
 		CloseHandle(hProcess);
-		return false;
+		return true;
 	}
 	else 
 	{
 		CloseHandle(hProcess);
-		return false;
+		return true;
 	}
 	
 }
+
+//====================================================================
+// Check if all processes have ended, if any active returns false
+//===================================================================
+bool ProcessTracker::HasAllProcessesEnded(const std::vector<DWORD>& vProcIDs, const DWORD& waitTime)
+{
+	// Get handles for all process IDs
+	std::vector<HANDLE> vHandles;
+
+	for (unsigned int i = 0; i < vProcIDs.size(); ++i)
+	{
+		HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS | PROCESS_QUERY_INFORMATION |
+			PROCESS_VM_READ,
+			FALSE, vProcIDs[i]);
+		
+		if (NULL != hProcess)
+			vHandles.push_back(hProcess);
+
+	}
+
+	//Vectors stored contiguously
+	HANDLE* arrHandle = &vHandles[0];
+	DWORD procStatus = WaitForMultipleObjects(vHandles.size(), arrHandle, true, waitTime);
+
+	if (procStatus == WAIT_TIMEOUT)
+	{
+		for (unsigned int i = 0; i < vHandles.size(); ++i)
+			CloseHandle(vHandles[i]);
+		return false;
+	}
+	else if (procStatus == WAIT_OBJECT_0)
+	{
+		for (unsigned int i = 0; i < vHandles.size(); ++i)
+			CloseHandle(vHandles[i]);
+ 		return true;
+	}
+	else if (procStatus == WAIT_FAILED)
+	{
+		for (unsigned int i = 0; i < vHandles.size(); ++i)
+			CloseHandle(vHandles[i]);
+		return true;
+	}
+	else
+	{
+		for (unsigned int i = 0; i < vHandles.size(); ++i)
+			CloseHandle(vHandles[i]);
+		return true;
+	}
+}
+
 

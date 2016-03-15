@@ -15,12 +15,14 @@
 class ProcessTracker
 {
 public:
-	bool GetAllRunningProcesses(std::vector<String>& vProcNames, std::vector<DWORD>& vProcIDs);
-	bool FindRunningProcesses(const String& procName, std::vector<String>& vProcNames, std::vector<DWORD>& vProcIDs);
+	static int GetAllRunningProcesses(std::vector<String>& vProcNames, std::vector<DWORD>& vProcIDs);
+	static bool FindRunningProcesses(const String& procName, std::vector<String>& vProcNames, std::vector<DWORD>& vProcIDs);
 
-	bool TerminateProcesses(std::vector<DWORD>& vProcIDs);
-	bool StartProcess(const String& procFullPathName);
+	static bool TerminateProcesses(std::vector<DWORD>& vProcIDs);
+	static bool StartProcess(const String& procFullPathName, bool hide = false);
 
-	bool GetProcessesStatus(const String& procKeyword, const std::vector<DWORD>& vProcIDs);
-	bool IsProcessRunning(const DWORD& procID, const DWORD& waitTime);
+	static bool IsProcessRunning(const String& procKeyword, const DWORD& procID);
+	static bool HasProcessEnded(const DWORD& procID, const DWORD& waitTime);
+	static bool HasAllProcessesEnded(const std::vector<DWORD>& vProcIDs, const DWORD& waitTime);
+
 };
