@@ -22,12 +22,14 @@ bool AppWrapper::StartAppOnClose(const std::string& startAppPath, const std::str
 	else
 	{
 		//check if processes are fully shutdown since TerminateProcess is asyncronous
-		while (!ProcessTracker::HasAllProcessesEnded(vProcessIDs, 1000))
+		while (!ProcessTracker::HasAllProcessesEnded_Snapshot(vProcessIDs, 1000))
 		{
 			std::cout << "... Waiting for " << closeAppName << " to exit" << std::endl;
 		}
 
 		std::cout << "... " << closeAppName << " exited" << std::endl;
+
+		std::cout << "... Starting " << startAppPath << std::endl;
 		return ProcessTracker::StartProcess(startAppPath, hide);
 	}
 }
@@ -54,12 +56,13 @@ bool AppWrapper::StartAppAndFoceClose(const std::string& startAppPath, const std
 	}
 
 	//check if processes are fully shutdown since TerminateProcess is asyncronous
-	while (!ProcessTracker::HasAllProcessesEnded(vProcessIDs, 1000))
+	while (!ProcessTracker::HasAllProcessesEnded_Snapshot(vProcessIDs, 1000))
 	{
 		std::cout << "... Waiting for " << closeAppName << " to exit" << std::endl;
 	}
 	
 	std::cout << "... " << closeAppName << " exited" << std::endl;
+	std::cout << "... Starting " << startAppPath << std::endl;
 	return ProcessTracker::StartProcess(startAppPath, hide);
 
 }

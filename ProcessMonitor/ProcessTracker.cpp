@@ -1,5 +1,10 @@
 #include "ProcessTracker.h"
 
+#include <iostream>
+#include <algorithm>
+
+#include <Windows.h>
+#include <TlHelp32.h>
 #include <Psapi.h>
 #include <tchar.h>
 #include <stdio.h>
@@ -134,7 +139,7 @@ bool ProcessTracker::TerminateProcesses(std::vector<DWORD>& vProcIDs)
 {
 	for (unsigned int i = 0; i < vProcIDs.size(); ++i)
 	{
-		HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS,
+		HANDLE hProcess = OpenProcess(PROCESS_TERMINATE,
 			FALSE, vProcIDs[i]);
 
 		DWORD dwExitCode = 0;
@@ -201,6 +206,8 @@ bool ProcessTracker::IsProcessRunning(const String& procKeyword, const DWORD& pr
 #ifdef _DEBUG
 		printf("process not found\n");
 #endif
+
+
 		return false;
 	}
 
@@ -305,6 +312,79 @@ bool ProcessTracker::HasAllProcessesEnded(const std::vector<DWORD>& vProcIDs, co
 			CloseHandle(vHandles[i]);
 		return true;
 	}
+}
+
+//==============================================================================
+// Check if all processes have ended using CreateToolHelp32Snapshot
+//===============================================================================
+int ProcessTracker::HasAllProcessesEnded_Snapshot(const std::vector<DWORD>& vProcIDs, const DWORD& waitTime)
+{
+	//==========================================================
+	HANDLE hProcess, hProcessSnap;
+	PROCESSENTRY32 pe32;
+	DWORD dwPriorityClass;
+
+	//Wait before checking processes
+	Sleep(waitTime);
+
+	//Take snapshot of all processes in system
+	hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if (hProcessSnap == INVALID_HANDLE_VALUE)
+	{
+		std::cout << "CreateToolHelp32 INVALID_HANDLE_VALUE" << std::endl;
+		return -1;
+	}
+
+	pe32.dwSize = sizeof(PROCESSENTRY32);
+
+	if (!Process32First(hProcessSnap, &pe32))
+	{
+		std::cout << "Process32First Error" << std::endl;
+		CloseHandle(hProcessSnap);
+		return -1;
+
+	}
+
+	//Check first returned process
+	//std::cout << pe32.szExeFile << " | " << pe32.th32ProcessID << std::endl;
+	if (std::find(vProcIDs.begin(), vProcIDs.end(), pe32.th32ParentProcessID) != vProcIDs.end())
+		return 0;
+
+
+	while (Process32Next(hProcessSnap, &pe32))
+	{
+	//	std::cout << pe32.szExeFile << " | " << pe32.th32ProcessID << std::endl
+		if (std::find(vProcIDs.begin(), vProcIDs.end(), pe32.th32ParentProcessID) != vProcIDs.end())
+			return 0;
+	}
+
+	CloseHandle(hProcessSnap);
+	return 1;
+
+
+}
+
+//==========================================================
+// Check if account for current process has admin rights
+//==============================================================
+bool ProcessTracker::IsCurrentProcessAdmin()
+{
+	BOOL b;
+	SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+	PSID AdministratorsGroup; 
+	b = AllocateAndInitializeSid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS,
+    0, 0, 0, 0, 0, 0, &AdministratorsGroup); 
+
+	if(b) 
+	{
+	 if (!CheckTokenMembership( NULL, AdministratorsGroup, &b)) 
+	 {
+         b = FALSE;
+	 } 
+    FreeSid(AdministratorsGroup); 
+}
+
+	return(b);
 }
 
 

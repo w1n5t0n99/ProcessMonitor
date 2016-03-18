@@ -25,4 +25,8 @@ public:
 	static bool HasProcessEnded(const DWORD& procID, const DWORD& waitTime);
 	static bool HasAllProcessesEnded(const std::vector<DWORD>& vProcIDs, const DWORD& waitTime);
 
+	static int HasAllProcessesEnded_Snapshot(const std::vector<DWORD>& vProcIDs, const DWORD& waitTime);
+
+	static bool IsCurrentProcessAdmin();
+
 };
